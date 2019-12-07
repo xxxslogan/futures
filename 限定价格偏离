@@ -1,0 +1,423 @@
+Vars
+   Numeric N; //下单手数
+   Numeric T; //时间间隔
+   Numeric W; //委托价位倍数
+   Numeric PLM; //偏离价位倍数
+   Numeric SH; //平仓参数
+   Numeric MA3; //3周期均线
+   Numeric MA5; //5周期均线
+   Numeric MA10; //10周期均线
+   Numeric KCP; //K线位置
+   Numeric SIGID; //指令序号
+   Numeric NOW; //当前时间
+   Numeric NEWP; //最新价
+   Numeric BIDP; //买一价
+   Numeric ASKP; //卖一价
+   Numeric RLP; //涨停价
+   Numeric FLP; //跌停价
+   Numeric MINP; //最小变动价位
+   Numeric BRP; //多头可用持仓
+   Numeric SRP; //空头可用持仓
+   Numeric OPFLG; //模型处理标志
+   Numeric BKDFLG; //买开处理标志
+   Numeric SKDFLG; //卖开处理标志
+   Numeric BPDFLG; //买平处理标志
+   Numeric SPDFLG; //卖平处理标志
+   Global_Numeric SIGIDA; //记录指令序号
+   Global_Numeric KCPA; //记录K线位置
+   Global_Numeric BKID; //买开委托
+   Global_Numeric SKID; //卖开委托
+    Global_Numeric BPID; //买平委托
+   Global_Numeric SPID; //卖平委托
+   Global_Numeric BKFLG; //买开标志
+   Global_Numeric SKFLG; //卖开标志
+   Global_Numeric BPFLG; //买平标志
+   Global_Numeric SPFLG; //卖平标志
+   Global_Numeric BKDEL; //买开撤单标志
+   Global_Numeric SKDEL; //卖开撤单标志
+   Global_Numeric BPDEL; //买平撤单标志
+   Global_Numeric SPDEL; //卖平撤单标志
+   Global_Numeric BKCP; //买开初始价格
+   Global_Numeric SKCP; //卖开初始价格
+   Global_Numeric BPCP; //买平初始价格
+   Global_Numeric SPCP; //卖平初始价格
+   Global_Numeric BKM; //买开委托手数
+   Global_Numeric SKM; //卖开委托手数
+   Global_Numeric BPM; //买平委托手数
+   Global_Numeric SPM; //卖平委托手数
+   Global_Numeric BKP; //买开委托价格
+   Global_Numeric SKP; //卖开委托价格
+   Global_Numeric BPP; //买平委托价格
+   Global_Numeric SPP; //卖平委托价格
+   Global_Numeric BKT; //买开委托时间
+   Global_Numeric SKT; //卖开委托时间
+   Global_Numeric BPT; //买平委托时间
+   Global_Numeric SPT; //卖平委托时间
+Setting
+   SignalNoTrading:1; //出信号不下单
+Begin
+//------------------------处理开启------------------------//
+    If(A_IsExchangeOpen() == 1) //如果是开盘状态
+    {
+If(BarStatus() == 2) //如果不带入历史值
+{
+If(RunStart() == 1) //如果已初始化成功
+{
+OPFLG = 1; //开启模型处理
+    }
+}
+}
+//------------------------变量赋值------------------------//
+    If(OPFLG == 1) //变量赋值
+    {
+       N = 2; //下单手数
+       T = 5; //时间间隔
+       PLM = 3; //偏离价位倍数
+       KCP = CurrentBar; //K线位置
+       NOW = CurrentTime(); //当前时间
+       NEWP = Price("New"); //最新价
+       BIDP = Price("Bid1"); //买一价
+       ASKP = Price("Ask1"); //卖一价
+       RLP = Price("RiseLimit"); //涨停价
+       FLP = Price("FallLimit"); //跌停价
+       MINP = Price("MinPrice"); //最小变动价位
+       BRP = F_BuyRemainPosition(); //多头可用持仓
+       SRP = F_SellRemainPosition(); //空头可用持仓
+       If(A_IsSHCode() == 1) //如果是上期所合约
+       {
+           SH = Enum_ExitToday; //平仓参数
+       }
+       Else //如果非上期所合约
+       {
+           SH = Enum_Exit; //平仓参数
+       }
+    }
+//------------------------信号发出------------------------//
+    If(1) //信号发出
+    {
+MA3 = Ma(Close,3); //3周期均线
+MA5 = Ma(Close,5); //5周期均线
+MA10 = Ma(Close,10); //10周期均线
+PlotLine("Ma3",Ma3); //3周期均线
+PlotLine("Ma5",Ma5); //5周期均线
+PlotLine("Ma10",Ma10); //10周期均线
+If(Ref(Cross(Ma5,Ma10),1) == 1 && MarketPosition == 0) //如果满足做多条件
+{
+BK; //发出做多信号
+}
+Else If(Ref(CrossDown(Ma3,Ma10),1) == 1 && MarketPosition == 1) //如果满足平多条件
+{
+SP; //发出平多信号
+}
+Else If(Ref(CrossDown(Ma5,Ma10),1) == 1 && MarketPosition == 0) //如果满足做空条件
+{
+SK; //发出做空信号
+}
+Else If(Ref(Cross(Ma3,Ma10),1) == 1 && MarketPosition == -1) //如果满足平空条件
+{
+BP; //发出平空信号
+}
+    }
+//------------------------信号处理------------------------//
+    If(OPFLG == 1) //信号处理
+    {
+SIGID = F_CurrentSigIndex; //指令序号
+If(SIGID != 0) //如果当笔行情发出指令
+{
+If(SIGID != SIGIDA || KCP != KCPA) //如果当前信号是未处理过的新信号
+{
+SIGIDA = SIGID; //记录指令序号
+KCPA = KCP; //记录K线位置
+If(F_CurrentSig == Sig_BK) //如果信号类型为BK
+{
+Commentary("【BK信号！】");
+BKDFLG = 1; //开启买开处理
+}
+Else If(F_CurrentSig == Sig_SP) //如果信号类型为SP
+{
+Commentary("【SP信号！】");
+SPDFLG = 1; //开启卖平处理
+}
+Else If(F_CurrentSig == Sig_SK) //如果信号类型为SK
+{
+Commentary("【SK信号！】");
+SKDFLG = 1; //开启卖开处理
+}
+Else If(F_CurrentSig == Sig_BP) //如果信号类型为BP
+{
+Commentary("【BP信号！】");
+BPDFLG = 1; //开启买平处理
+}
+}
+}
+    }
+//------------------------成交判断------------------------//
+    If(OPFLG == 1) //成交判断
+    {
+If(BKFLG == 1) //如果有买开委托
+{
+If(F_OrderStatus(BKID) == Enum_Filled) //如果买开委托成交
+{
+Commentary("【BK信号：买开委托成交！】");
+BKFLG = 0; //买开标志归0
+BKDEL = 0; //买开撤单标志归0
+}
+Else If(F_OrderStatus(BKID) == Enum_Canceled) //如果买开委托已撤
+{
+Commentary("【BK信号：买开委托已撤！】");
+If(BKDEL == 1) //如果是价格偏离过大撤单
+{
+BKFLG = 0; //买开标志归0
+}
+Else If(BKDEL == 2) //如果是时间间隔T秒追价
+{
+If(F_OrderFilledLot(BKID) > 0) //如果买开委托部分成交
+{
+BKM = BKM - F_OrderFilledLot(BKID); //买开委托手数
+}
+If(BKM > 0) //如果买开委托手数大于0
+{
+BKP = ASKP; //买开委托价格
+Commentary("【BK信号：买开委托追价！】");
+BKID = A_SendOrder(Enum_Buy,Enum_Entry,BKM,BKP); //发出买开委托
+BKT = NOW; //买开委托时间
+}
+}
+BKDEL = 0; //买开撤单标志归0
+}
+Else If(F_OrderStatus(BKID) == Enum_Declared || F_OrderStatus(BKID) == Enum_FillPart) //如果买开委托挂单
+{
+If(BKDEL == 0) //如果未撤单
+{
+If(Abs(NEWP - BKCP) > PLM * MINP) //如果价格偏离过大
+{
+Commentary("【BK信号：价格偏离过大！】");
+Commentary("【BK信号：买开委托撤单！】");
+F_DeleteOrder(F_OrderContractNo(BKID)); //撤掉买开委托挂单
+BKDEL = 1; //已发出撤掉买开委托挂单
+}
+Else If(TimeDiff(BKT,NOW) >= T) //如果时间间隔T秒
+{
+Commentary("【BK信号：买开委托撤单！】");
+F_DeleteOrder(F_OrderContractNo(BKID)); //撤掉买开委托挂单
+BKDEL = 2; //已发出撤掉买开委托挂单
+}
+}
+}
+}
+If(SPFLG == 1) //如果有卖平委托
+{
+If(F_OrderStatus(SPID) == Enum_Filled) //如果卖平委托成交
+{
+Commentary("【SP信号：卖平委托成交！】");
+SPFLG = 0; //卖平标志归0
+SPDEL = 0; //卖平撤单标志归0
+}
+Else If(F_OrderStatus(SPID) == Enum_Canceled) //如果卖平委托已撤
+{
+Commentary("【SP信号：卖平委托已撤！】");
+If(F_OrderFilledLot(SPID) > 0) //如果卖平委托部分成交
+{
+SPM = SPM - F_OrderFilledLot(SPID); //卖平委托手数
+}
+If(BRP > 0 && SPM > 0 && SPM <= BRP) //如果卖平委托手数不超过多头可用持仓
+{
+If(SPDEL == 1) //如果是价格偏离过大追价
+{
+SPP = FLP; //卖平委托价格
+}
+Else If(SPDEL == 2) //如果是时间间隔T秒追价
+{
+SPP = BIDP; //卖平委托价格
+SPT = NOW; //卖平委托时间
+SPDEL = 0; //卖平撤单标志归0
+}
+Commentary("【SP信号：卖平委托追价！】");
+SPID = A_SendOrder(Enum_Sell,SH,SPM,SPP); //发出卖平委托
+}
+}
+Else If(F_OrderStatus(SPID) == Enum_Declared || F_OrderStatus(SPID) == Enum_FillPart) //如果卖平委托挂单
+{
+If(SPDEL == 0) //如果未撤单
+{
+If(Abs(NEWP - SPCP) > PLM * MINP) //如果价格偏离过大
+{
+Commentary("【SP信号：价格偏离过大！】");
+Commentary("【SP信号：卖平委托撤单！】");
+F_DeleteOrder(F_OrderContractNo(SPID)); //撤掉卖平委托挂单
+SPDEL = 1; //已发出撤掉卖平委托挂单
+} Else If(TimeDiff(SPT,NOW) >= T) //如果时间间隔T秒
+{
+Commentary("【SP信号：卖平委托撤单！】");
+F_DeleteOrder(F_OrderContractNo(SPID)); //撤掉卖平委托挂单
+SPDEL = 2; //已发出撤掉卖平委托挂单
+}
+}
+}
+}
+If(SKFLG == 1) //如果有卖开委托
+{
+If(F_OrderStatus(SKID) == Enum_Filled) //如果卖开委托成交
+{
+Commentary("【SK信号：卖开委托成交！】");
+SKFLG = 0; //卖开标志归0
+SKDEL = 0; //卖开撤单标志归0
+}
+Else If(F_OrderStatus(SKID) == Enum_Canceled) //如果卖开委托已撤
+{
+Commentary("【SK信号：卖开委托已撤！】");
+If(SKDEL == 1) //如果是价格偏离过大撤单
+{
+SKFLG = 0; //卖开标志归0
+}
+Else If(SKDEL == 2) //如果是时间间隔T秒追价
+{
+If(F_OrderFilledLot(SKID) > 0) //如果卖开委托部分成交
+{
+SKM = SKM - F_OrderFilledLot(SKID); //卖开委托手数
+}
+If(SKM > 0) //如果卖开委托手数大于0
+{
+SKP = BIDP; //卖开委托价格
+Commentary("【SK信号：卖开委托追价！】");
+SKID = A_SendOrder(Enum_Sell,Enum_Entry,SKM,SKP); //发出卖开委托
+SKT = NOW; //卖开委托时间
+}
+}
+SKDEL = 0; //卖开撤单标志归0
+}
+Else If(F_OrderStatus(SKID) == Enum_Declared || F_OrderStatus(SKID) == Enum_FillPart) //如果卖开委托挂单
+{
+If(SKDEL == 0) //如果未撤单
+{
+If(Abs(NEWP - SKCP) > PLM * MINP) //如果价格偏离过大
+{
+Commentary("【SK信号：价格偏离过大！】");
+Commentary("【SK信号：卖开委托撤单！】");
+F_DeleteOrder(F_OrderContractNo(SKID)); //撤掉卖开委托挂单
+SKDEL = 1; //已发出撤掉卖开委托挂单
+}
+Else If(TimeDiff(SKT,NOW) >= T) //如果时间间隔T秒
+{
+Commentary("【SK信号：卖开委托撤单！】");
+F_DeleteOrder(F_OrderContractNo(SKID)); //撤掉卖开委托挂单
+SKDEL = 2; //已发出撤掉卖开委托挂单
+}
+}
+}
+}
+If(BPFLG == 1) //如果有买平委托
+{
+If(F_OrderStatus(BPID) == Enum_Filled) //如果买平委托成交
+{
+Commentary("【BP信号：买平委托成交！】");
+BPFLG = 0; //买平标志归0
+BPDEL = 0; //买平撤单标志归0
+}
+Else If(F_OrderStatus(BPID) == Enum_Canceled) //如果买平委托已撤
+{
+Commentary("【BP信号：买平委托已撤！】");
+If(F_OrderFilledLot(BPID) > 0) //如果买平委托部分成交
+{
+BPM = BPM - F_OrderFilledLot(BPID); //买平委托手数
+}
+If(SRP > 0 && BPM > 0 && BPM <= SRP) //如果买平委托手数不超过空头可用持仓持仓
+{
+If(BPDEL == 1) //如果是价格偏离过大追价
+{
+BPP = RLP; //买平委托价格
+}
+Else If(BPDEL == 2) //如果是时间间隔T秒追价
+{
+BPP = ASKP; //买平委托价格
+BPT = NOW; //买平委托时间
+BPDEL = 0; //买平撤单标志归0
+}
+Commentary("【BP信号：买平委托追价！】");
+BPID = A_SendOrder(Enum_Buy,SH,BPM,BPP); //发出买平委托
+}
+}
+Else If(F_OrderStatus(BPID) == Enum_Declared || F_OrderStatus(BPID) == Enum_FillPart) //如果买平委托挂单
+{
+If(BPDEL == 0) //如果未撤单
+{
+If(Abs(NEWP - BPCP) > PLM * MINP) //如果价格偏离过大
+{
+Commentary("【BP信号：价格偏离过大！】");
+Commentary("【BP信号：买平委托撤单！】");
+F_DeleteOrder(F_OrderContractNo(BPID)); //撤掉买平委托挂单
+BPDEL = 1; //已发出撤掉买平委托挂单
+}
+Else If(TimeDiff(BPT,NOW) >= T) //如果时间间隔T秒
+{
+Commentary("【BP信号：买平委托撤单！】");
+F_DeleteOrder(F_OrderContractNo(BPID)); //撤掉买平委托挂单
+BPDEL = 2; //已发出撤掉买平委托挂单
+}
+}
+}
+}
+    }
+//------------------------委托处理------------------------//
+    If(OPFLG == 1) //委托处理
+    {
+If(BKDFLG == 1) //如果已开启买开处理
+{
+If(BKFLG == 0) //如果没有买开委托
+{
+BKM = N; //买开委托手数
+BKP = ASKP; //买开委托价格
+BKCP = BKP; //买开初始价格
+Commentary("【BK信号：买开委托发出！】");
+BKID = A_SendOrder(Enum_Buy,Enum_Entry,BKM,BKP); //发出买开委托
+BKT = NOW; //买开委托时间
+BKFLG = 1; //已发出买开委托
+}
+}
+If(SPDFLG == 1) //如果已开启卖平处理
+{
+If(SPFLG == 0) //如果没有卖平委托
+{
+If(BRP > 0) //如果有多头可用持仓
+{
+SPM = BRP; //卖平委托手数
+SPP = BIDP; //卖平委托价格
+SPCP = SPP; //卖平初始价格
+Commentary("【SP信号：卖平委托发出！】");
+SPID = A_SendOrder(Enum_Sell,SH,SPM,SPP); //发出卖平委托
+SPT = NOW; //卖平委托时间
+SPFLG = 1; //已发出卖平委托
+}
+}
+}
+If(SKDFLG == 1) //如果已开启卖开处理
+{
+If(SKFLG == 0) //如果没有卖开委托
+{
+SKM = N; //卖开委托手数
+SKP = BIDP; //卖开委托价格
+SKCP = SKP; //卖开初始价格
+Commentary("【SK信号：卖开委托发出！】");
+SKID = A_SendOrder(Enum_Sell,Enum_Entry,SKM,SKP); //发出卖开委托
+SKT = NOW; //卖开委托时间
+SKFLG = 1; //已发出卖开委托
+}
+}
+If(BPDFLG == 1) //如果已开启买平处理
+{
+If(BPFLG == 0) //如果没有买平委托
+{
+If(SRP > 0) //如果有空头可用持仓
+{
+BPM = SRP; //买平委托手数
+BPP = ASKP; //买平委托价格
+BPCP = BPP; //买平初始价格
+Commentary("【BP信号：买平委托发出！】");
+BPID = A_SendOrder(Enum_Buy,SH,BPM,BPP); //发出买平委托
+BPT = NOW; //买平委托时间
+BPFLG = 1; //已发出买平委托
+}
+}
+}
+    }
+End
