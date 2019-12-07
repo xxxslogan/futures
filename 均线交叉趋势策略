@@ -1,0 +1,388 @@
+Vars
+   Numeric N; //下单手数
+   Numeric T; //时间间隔
+   Numeric SH; //平仓参数
+   Numeric MA3; //3周期均线
+   Numeric MA5; //5周期均线
+   Numeric MA10; //10周期均线
+   Numeric KCP; //K线位置
+   Numeric SIGID; //指令序号
+   Numeric NOW; //当前时间
+   Numeric BIDP; //买一价
+   Numeric ASKP; //卖一价
+   Numeric BRP; //多头可用持仓
+   Numeric SRP; //空头可用持仓
+   Numeric OPFLG; //模型处理标志
+   Numeric BKDFLG; //买开处理标志
+   Numeric SKDFLG; //卖开处理标志
+   Numeric BPDFLG; //买平处理标志
+   Numeric SPDFLG; //卖平处理标志
+   Global_Numeric SIGIDA; //记录指令序号
+   Global_Numeric KCPA; //记录K线位置
+   Global_Numeric KCPB; //记录K线位置
+   Global_Numeric SIGF; //信号类型标志
+   Global_Numeric SIGCF; //当前信号类型
+   Global_Numeric SIGCN; //信号出现次数
+   Global_Numeric SIGXN; //信号消失次数
+   Global_Numeric SIGXT; //信号消失时间
+   Global_Numeric SIGFLG; //信号处理标志
+   Global_Numeric BKID; //买开委托
+   Global_Numeric SKID; //卖开委托
+   Global_Numeric BPID; //买平委托
+   Global_Numeric SPID; //卖平委托
+   Global_Numeric BKFLG; //买开标志
+   Global_Numeric SKFLG; //卖开标志
+   Global_Numeric BPFLG; //买平标志
+   Global_Numeric SPFLG; //卖平标志
+   Global_Numeric BKM; //买开委托手数
+   Global_Numeric SKM; //卖开委托手数
+   Global_Numeric BPM; //买平委托手数
+   Global_Numeric SPM; //卖平委托手数
+Setting
+   SignalNoTrading:1; //出信号不下单
+Begin
+//------------------------处理开启------------------------//
+   If(A_IsExchangeOpen() == 1) //如果是开盘状态
+   {
+      If(BarStatus() == 2) //如果不带入历史值
+      {
+         If(RunStart() == 1) //如果已初始化成功
+         {
+            OPFLG = 1; //开启模型处理
+         }
+      }
+   }
+//------------------------变量赋值------------------------//
+   If(OPFLG == 1) //变量赋值
+   {
+      N = 2; //下单手数
+      T = 10; //时间间隔
+      KCP = CurrentBar; //K线位置
+      NOW = CurrentTime(); //当前时间
+      BIDP = Price("Bid1"); //买一价
+      ASKP = Price("Ask1"); //卖一价
+      BRP = F_BuyRemainPosition(); //多头可用持仓
+      SRP = F_SellRemainPosition(); //空头可用持仓
+      If(A_IsSHCode() == 1) //如果是上期所合约
+      {
+         SH = Enum_ExitToday; //平仓参数
+      }
+      Else //如果非上期所合约
+      {
+         SH = Enum_Exit; //平仓参数
+      }
+   }
+//------------------------信号发出------------------------//
+   If(1) //信号发出
+   {
+      MA3 = Ma(Close,3); //3周期均线
+      MA5 = Ma(Close,5); //5周期均线
+      MA10 = Ma(Close,10); //10周期均线
+      PlotLine("Ma3",Ma3); //3周期均线
+      PlotLine("Ma5",Ma5); //5周期均线
+      PlotLine("Ma10",Ma10); //10周期均线
+      If(Cross(Ma5,Ma10) == 1 && MarketPosition == 0) //如果满足做多条件
+      {
+         BK; //发出做多信号
+      }
+      Else If(CrossDown(Ma3,Ma10) == 1 && MarketPosition == 1) //如果满足平多条件
+      {
+         SP; //发出平多信号
+      }
+      Else If(CrossDown(Ma5,Ma10) == 1 && MarketPosition == 0) //如果满足做空条件
+      {
+         SK; //发出做空信号
+      }
+      Else If(Cross(Ma3,Ma10) == 1 && MarketPosition == -1) //如果满足平空条件
+      {
+         SK; //发出平空信号
+      }
+   }
+//------------------------信号处理------------------------//
+   If(OPFLG == 1) //信号处理
+   {
+      If(KCP != KCPB) //如果是新K线
+      {
+         If(SIGCN > 0) //如果上根K线出现信号
+         {
+            Commentary("【上根K线信号出现次数：" + Text(SIGCN) + "次！】");
+            Commentary("【上根K线信号消失次数：" + Text(SIGXN) + "次！】");
+            If(SIGFLG == 2) //如果信号已消失
+            {
+            Commentary("【距离信号消失时间：" + Text(TimeDiff(SIGXT,NOW)) + "秒！】");
+            }
+         }
+         SIGCN = 0; //信号出现次数
+         SIGXN = 0; //信号消失次数
+         KCPB = KCP; //记录K线位置
+      }
+      SIGID = F_CurrentSigIndex; //指令序号
+      If(SIGID != 0) //如果当笔行情发出指令
+      {
+         If(SIGID != SIGIDA || KCP != KCPA) //如果当前信号是未处理过的新信号
+         {
+            SIGIDA = SIGID; //记录指令序号
+            KCPA = KCP; //记录K线位置
+             If(F_CurrentSig == Sig_BK) //如果信号类型为BK
+            {
+            Commentary("【BK信号！】");
+            BKDFLG = 1; //开启BK信号买开处理
+            SIGF = 1; //BK信号已发出
+            }
+            Else If(F_CurrentSig == Sig_SP) //如果信号类型为SP
+            {
+            Commentary("【SP信号！】");
+            SPDFLG = 1; //开启SP信号卖平处理
+            SIGF = 2; //SP信号已发出
+            }
+            Else If(F_CurrentSig == Sig_SK) //如果信号类型为SK
+            {
+            Commentary("【SK信号！】");
+            SKDFLG = 1; //开启SK信号卖开处理
+            SIGF = 3; //SK信号已发出
+            }
+            Else If(F_CurrentSig == Sig_BP) //如果信号类型为BP
+            {
+            Commentary("【BP信号！】");
+            BPDFLG = 1; //开启BP信号买平处理
+            SIGF = 4; //BP信号已发出
+            }
+            SIGCN = SIGCN + 1; //信号出现次数
+         }
+      }
+      If(KCP == KCPA) //如果是当根K线
+      {
+         If(SIGCF != SIGF) //如果是新的信号类型
+         {
+            SIGFLG = 1; //信号已发出
+            SIGCF = SIGF; //当前信号类型
+         }
+         If(SIGFLG == 1) //如果信号已出现
+         {
+            If(F_CurrentSig == 0) //如果信号消失
+            {
+            If(SIGCF == 1) //如果当前是BK信号
+            {
+            Commentary("【BK信号消失！】");
+            }
+            Else If(SIGCF == 2) //如果当前是SP信号
+            {
+            Commentary("【SP信号消失！】");
+            }
+            Else If(SIGCF == 3) //如果当前是SK信号
+            {
+            Commentary("【SK信号消失！】");
+            }
+            Else If(SIGCF == 4) //如果当前是BP信号
+            {
+            Commentary("【BP信号消失！】");
+            }
+            SIGIDA = 0; //记录指令序号归0
+            SIGXT = NOW; //信号消失时间
+            SIGXN = SIGXN + 1; //信号消失次数
+            SIGFLG = 2; //信号已消失
+            }
+         }
+      }
+      If(SIGFLG == 2) //如果信号已消失
+      {
+         If(TimeDiff(SIGXT,NOW) <= T) //如果时间间隔T秒内
+         {
+            If(F_CurrentSig > 0) //如果信号出现
+            {
+            If(SIGCF == 1) //如果当前是BK信号
+            {
+            Commentary("【BK信号重现！】");
+            }
+            Else If(SIGCF == 2) //如果当前是SP信号
+            {
+            Commentary("【SP信号重现！】");
+            }
+            Else If(SIGCF == 3) //如果当前是SK信号
+            {
+            Commentary("【SK信号重现！】");
+            }
+            Else If(SIGCF == 4) //如果当前是BP信号
+            {
+            Commentary("【BP信号重现！】");
+            }
+            Commentary("【距离信号消失时间：" + Text(TimeDiff(SIGXT,NOW)) + "秒！】");
+            SIGFLG = 1; //信号已发出
+            }
+         }
+         Else If(TimeDiff(SIGXT,NOW) > T) //如果时间间隔T秒
+         {
+            If(SIGCF == 1) //如果当前是BK信号
+            {
+            Commentary("【BK信号取消！】");
+            SPDFLG = 2; //开启BK信号卖平处理
+            }
+            Else If(SIGCF == 2) //如果当前是SP信号
+            {
+            Commentary("【SP信号取消！】");
+            BKDFLG = 2; //开启SP信号买开处理
+            }
+            Else If(SIGCF == 3) //如果当前是SK信号
+            {
+            Commentary("【SK信号取消！】");
+            BPDFLG = 2; //开启SK信号买平处理
+            }
+            Else If(SIGCF == 4) //如果当前是BP信号
+            {
+            Commentary("【BP信号取消！】");
+            SKDFLG = 2; //开启BP信号卖开处理
+            }
+            Commentary("【距离信号消失时间：" + Text(TimeDiff(SIGXT,NOW)) + "秒！】");
+            SIGFLG = 0; //信号已取消
+         }
+      }
+   }
+//------------------------成交判断------------------------//
+   If(OPFLG == 1) //成交判断
+   {
+      If(BKFLG > 0) //如果有买开委托
+      {
+         If(F_OrderStatus(BKID) == Enum_Filled) //如果买开委托成交
+         {
+            If(BKFLG == 1) //如果是BK信号买开委托
+            {
+            Commentary("【BK信号：买开委托成交！】");
+            }
+            Else If(BKFLG == 2) //如果是SP信号买开委托
+            {
+            Commentary("【SP信号：买开委托成交！】");
+            }
+            BKFLG = 0; //买开标志归0
+         }
+      }
+      If(SPFLG > 0) //如果有卖平委托
+      {
+         If(F_OrderStatus(SPID) == Enum_Filled) //如果卖平委托成交
+         {
+            If(SPFLG == 1) //如果是SP信号卖平委托
+            {
+            Commentary("【SP信号：卖平委托成交！】");
+            }
+            Else If(SPFLG == 2) //如果是BK信号卖平委托
+            {
+            Commentary("【BK信号：卖平委托成交！】");
+            }
+            SPFLG = 0; //卖平标志归0
+         }
+      }
+      If(SKFLG > 0) //如果有卖开委托
+      {
+         If(F_OrderStatus(SKID) == Enum_Filled) //如果卖开委托成交
+         {
+            If(SKFLG == 1) //如果是SK信号卖开委托
+            {
+            Commentary("【SK信号：卖开委托成交！】");
+            }
+            Else If(SKFLG == 2) //如果是BP信号卖开委托
+            {
+            Commentary("【BP信号：卖开委托成交！】");
+            }
+            SKFLG = 0; //卖开标志归0
+         }
+      }
+      If(BPFLG > 0) //如果有买平委托
+      {
+         If(F_OrderStatus(BPID) == Enum_Filled) //如果买平委托成交
+         {
+            If(BPFLG == 1) //如果是BP信号买平委托
+            {
+            Commentary("【BP信号：买平委托成交！】");
+            }
+            Else If(BPFLG == 2) //如果是SK信号买平委托
+            {
+            Commentary("【SK信号：买平委托成交！】");
+            }
+            BPFLG = 0; //买平标志归0
+         }
+      }
+   }
+//------------------------委托处理------------------------//
+   If(OPFLG == 1) //委托处理
+   {
+      If(BKDFLG > 0) //如果已开启买开处理
+      {
+         If(BKFLG == 0) //如果没有买开委托
+         {
+            BKM = N - BRP; //买开委托手数
+            If(BKM > 0) //如果买开委托手数大于0
+            {
+            If(BKDFLG == 1) //如果是BK信号买开
+            {
+            Commentary("【BK信号：买开委托发出！】");
+            }
+            Else If(BKDFLG == 2) //如果是SP信号买开
+            {
+            Commentary("【SP信号：买开委托发出！】");
+            }
+            BKID = A_SendOrder(Enum_Buy,Enum_Entry,BKM,ASKP); //发出买开委托
+            BKFLG = BKDFLG; //已发出买开委托
+            }
+         }
+      }
+      If(SPDFLG > 0) //如果已开启卖平处理
+      {
+         If(SPFLG == 0) //如果没有卖平委托
+         {
+            If(BRP > 0) //如果有多头可用持仓
+            {
+            SPM = BRP; //卖平委托手数
+            If(SPDFLG == 1) //如果是SP信号卖平
+            {
+            Commentary("【SP信号：卖平委托发出！】");
+            }
+            Else If(SPDFLG == 2) //如果是BK信号卖平
+            {
+            Commentary("【BK信号：卖平委托发出！】");
+            }
+            SPID = A_SendOrder(Enum_Sell,SH,SPM,BIDP); //发出卖平委托
+            SPFLG = SPDFLG; //已发出卖平委托
+            }
+         }
+      }
+      If(SKDFLG > 0) //如果已开启卖开处理
+      {
+         If(SKFLG == 0) //如果没有卖开委托
+         {
+            SKM = N - SRP; //卖开委托手数
+            If(SKM > 0) //如果卖开委托手数大于0
+            {
+            If(SKDFLG == 1) //如果是SK信号卖开
+            {
+            Commentary("【SK信号：卖开委托发出！】");
+            }
+            Else If(SKDFLG == 2) //如果是BP信号卖开
+            {
+            Commentary("【BP信号：卖开委托发出！】");
+            }
+            SKID = A_SendOrder(Enum_Sell,Enum_Entry,SKM,BIDP); //发出卖开委托
+            SKFLG = SKDFLG; //已发出卖开委托
+            }
+         }
+      }
+      If(BPDFLG > 0) //如果已开启买平处理
+      {
+         If(BPFLG == 0) //如果没有买平委托
+         {
+            If(SRP > 0) //如果有空头可用持仓
+            {
+            BPM = SRP; //买平委托手数
+            If(BPDFLG == 1) //如果是BP信号买平
+            {
+            Commentary("【BP信号：买平委托发出！】");
+            }
+            Else If(BPDFLG == 2) //如果是SK信号买平
+            {
+            Commentary("【SK信号：买平委托发出！】");
+            }
+            BPID = A_SendOrder(Enum_Buy,SH,BPM,ASKP); //发出买平委托
+            BPFLG = BPDFLG; //已发出买平委托
+            }
+         }
+      }
+   }
+End
